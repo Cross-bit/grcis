@@ -1,8 +1,219 @@
-﻿using System.Drawing;
+﻿  using System.Drawing;
 using MathSupport;
+using System;
+using System.Collections.Generic;
 
 namespace _051colormap
 {
+
+  public static class Helpers {
+
+
+    public static int GetColorDistancePow2 (Color col1, Color col2)
+    {
+
+      int res = (int)Math.Pow(col1.R - col2.R, 2) + (int)Math.Pow(col1.G - col2.G, 2) + (int)Math.Pow(col1.B - col2.B, 2);
+      return res;
+    }
+    public static int GetColorDistancePow2 (Color col1, (byte R, byte G, byte B) col2) {
+      int res = (int)Math.Pow(col1.R - col2.R, 2) + (int)Math.Pow(col1.G - col2.G, 2) + (int)Math.Pow(col1.B - col2.B, 2);
+      return res;
+    }
+
+  }
+
+  public interface IColorSort {
+    Color[] SortColors ();
+  }
+
+  public class SortByHue : IColorSort {
+
+    private List<(double hue, Color color)> _colors;
+    private Color[] _result;
+    public SortByHue(Color[] colors) {
+      _colors = new List<(double, Color)>(colors.Length);
+      _result = new Color[colors.Length];
+      InitializeColors(colors);
+    }
+
+    private void InitializeColors (Color[] colors) {
+
+      foreach (var col in colors) {
+        double H, S, V;
+        Arith.ColorToHSV(col, out H, out S, out V);
+        _colors.Add((H, col));
+      }
+    }
+
+    public Color[] SortColors () {
+      SortInternalList();
+      InitializeResult();
+      return _result;
+    }
+
+    private void SortInternalList() => _colors.Sort((col1, col2) => col1.hue.CompareTo(col2.hue));
+    private void InitializeResult () {
+      for(int i = 0; i < _colors.Count; i++)
+        _result[i] = _colors[i].color;
+    }
+  }
+
+
+  public class CentroidInitializator
+  {
+      Bitmap _input;
+      int _centroidsCount;
+    //Dictionary<(int x, int y), List<(int x, int y)>> _clustersData;
+    List<(int x, int y)> _centroids;
+
+     public CentroidInitializator (Bitmap inputData, int centroidsCount) {
+      _input = inputData;
+      _centroidsCount = centroidsCount;
+      _centroids = new List<(int x, int y)>(_centroidsCount);
+
+      for (int i = 0; i < _centroidsCount; i++) {
+        _centroids.Add((-1,-1));
+      }
+
+      // todo: případně i omezit dopředu velikost clusteru
+    }
+
+    public void InitializeFirstCentroid () {
+
+      var rnd = new Random();
+      int colPiv = rnd.Next(_input.Width-1);
+      int rowPiv = rnd.Next(_input.Height-1);
+      _centroids[0] = (colPiv, rowPiv);
+
+    }
+
+    public void InitializeRemainingCentroids () {
+      
+      Dictionary<(int x, int y), int> minimalDistances = new Dictionary<(int x, int y), int>(_input.Width*_input.Height - _centroidsCount);
+
+      //((int x, int y), int val) closestPoint; // candidate for next centroid
+
+
+      for (int i = 0; i < _centroidsCount - 1; i++) // for each centroid
+      {
+        Color currentCentroidCol = _input.GetPixel(_centroids[i].x, _centroids[i].y);
+
+        for (int y = 0; y < _input.Height; y++) {
+          for (int x = 0; x < _input.Width; x++) {
+            
+            if (!_centroids.Contains((x, y))) { // not a centroid
+
+              int dist = Helpers.GetColorDistancePow2(_input.GetPixel(x, y), currentCentroidCol); // select max
+
+
+              if (i == 0) {
+                minimalDistances.Add((x, y), dist);
+              }
+              else {
+             //  Console.WriteLine(minimalDistances[(x, y)]);
+                if (dist < minimalDistances[(x, y)]) {
+                  /*Console.WriteLine(dist);
+                  Console.WriteLine(minimalDistances[(x, y)]);*/
+                  minimalDistances[(x, y)] = dist;
+                }
+              }
+
+            }
+          }
+        }
+
+        ((int x, int y), int value) maxFromMins = ((0, 0), 0);
+
+        foreach (var item in minimalDistances)
+        {
+          if (item.Value > maxFromMins.value && !_centroids.Contains(item.Key)) {
+            maxFromMins = (item.Key, item.Value);
+          }
+        }
+        _centroids[i + 1] = maxFromMins.Item1;
+      }
+    }
+
+    public List<(int x, int y)> InitializeCluster () {
+      InitializeFirstCentroid();
+      InitializeRemainingCentroids();
+      return _centroids;
+    }
+
+  }
+
+
+  public class kMeansClustering {
+
+    Bitmap _input;
+    int _clustersCount;
+
+    Dictionary<(int x, int y), (byte R, byte G, byte B)> _previousClusterRes;
+
+    Dictionary<(int x, int y), (int R, int G, int B)> _currentClustersRes;
+
+    Dictionary<(int x, int y), int> _currentClusterColCount = new Dictionary<(int x, int y), int>();
+
+    List<(byte R, byte G, byte B)> _previousCentroids = new List<(byte R, byte G, byte B)>();
+    List<(int R, int G, int B)> _currentCentroids = new List<(int R, int G, int B)>();
+
+
+    bool _isClustering = true;
+
+    
+
+    kMeansClustering (Bitmap inputData, int clustersCount) {
+      _input = inputData;
+      _clustersCount = clustersCount;
+
+    }
+
+    private (int x, int y) FindClosestCluster(ref Color col) {
+
+      (int x, int y) closestCluster = (0, 0);
+      int minDist = int.MaxValue;
+      foreach (var cluster in _previousClusterRes) {
+        int dist = Helpers.GetColorDistancePow2(col, cluster.Value);
+        if (dist < minDist) {
+          closestCluster = cluster.Key;
+          minDist = dist;
+        }
+
+      }
+
+      return closestCluster;
+    }
+
+    public void UpdateClustering () {
+      while (_isClustering) {
+
+
+        for (int y = 0; y < _input.Height; y++) {
+          for (int x = 0; x < _input.Width; x++) {
+            Color col = _input.GetPixel(x, y);
+            var closestCluster = FindClosestCluster(ref col);
+
+            _currentClustersRes[closestCluster] +=
+          }
+        }
+      }
+
+    }
+
+    public void InitializeCentroids() {
+      var centI = new CentroidInitializator(_input, _clustersCount);
+      foreach(var centroidCord in centI.InitializeCluster()) {
+        var (x, y) = centroidCord;
+        var col = _input.GetPixel(x, y);
+        _previousClusterRes.Add((x, y), (col.R, col.G, col.B));
+        _currentClustersRes.Add((x, y), (0, 0, 0));
+      }
+    }
+
+  }
+
+
+
   class Colormap
   {
     /// <summary>
@@ -10,7 +221,7 @@ namespace _051colormap
     /// </summary>
     public static void InitForm (out string author)
     {
-      author = "Josef Pelikán";
+      author = "Ondřej Kříž";
     }
 
     /// <summary>
@@ -22,8 +233,23 @@ namespace _051colormap
     public static void Generate (Bitmap input, int numCol, out Color[] colors)
     {
       // !!!{{ TODO - generate custom palette based on the given image
+      colors = new Color[numCol];
 
-      int width  = input.Width;
+      var centI = new CentroidInitializator(input, numCol);
+      var centroids = centI.InitializeCluster();
+
+      for (int i = 0; i < numCol; i++) {
+       // Console.WriteLine(centroids[i]);
+        colors[i] = input.GetPixel(centroids[i].x, centroids[i].y);
+      }
+
+      /*var sorter = new SortByHue(colors);
+      colors = sorter.SortColors();*/
+
+
+      return;
+
+   /*   int width  = input.Width;
       int height = input.Height;
 
       colors = new Color[numCol];            // accepting the required palette size..
@@ -52,7 +278,7 @@ namespace _051colormap
         g += dg;
         b += db;
         colors[i] = Color.FromArgb((int)r, (int)g, (int)b);
-      }
+      }*/
 
       // !!!}}
     }

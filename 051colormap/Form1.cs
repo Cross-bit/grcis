@@ -13,6 +13,8 @@ namespace _051colormap
     private static Bitmap inputImage = null;
     public static int numCol = 6;
 
+    static string testImg = @"E:\school\NPRG003\grcis\051colormap\test_img\test_1.JPG";
+
     public Form1 ()
     {
       InitializeComponent();
@@ -27,6 +29,10 @@ namespace _051colormap
       colors[3] = Color.FromArgb( 20, 200,  20);
       colors[4] = Color.FromArgb(  0, 250, 160);
       colors[5] = Color.FromArgb( 20,  20, 255);
+
+      setImage(ref inputImage, (Bitmap)Image.FromFile(testImg));
+      Colormap.Generate(inputImage, numCol, out colors);
+
       pictureBox1.Invalidate();
     }
 
