@@ -154,8 +154,8 @@ namespace _051colormap
 
     Dictionary<(int x, int y), int> _currentClusterColCount = new Dictionary<(int x, int y), int>();
 
-    List<(byte R, byte G, byte B)> _previousCentroids = new List<(byte R, byte G, byte B)>();
-    List<(int R, int G, int B)> _currentCentroids = new List<(int R, int G, int B)>();
+    //List<(byte R, byte G, byte B)> _previousCentroids = new List<(byte R, byte G, byte B)>();
+    Dictionary<(byte R, byte G, byte B), (int R, int G, int B, int ctr)> _currentCentroids = new Dictionary<(byte R, byte G, byte B), (int R, int G, int B, int ctr)>();
 
 
     bool _isClustering = true;
@@ -168,36 +168,58 @@ namespace _051colormap
 
     }
 
-    private (int x, int y) FindClosestCluster(ref Color col) {
+    private (byte R, byte G, byte B) FindClosestCentroid (ref Color col) {
 
-      (int x, int y) closestCluster = (0, 0);
+      (byte R, byte G, byte B) closestCentroid = _currentCentroids.Keys.GetEnumerator().Current; // todo: i am not sure what this returns 1? or it blows up XD
       int minDist = int.MaxValue;
-      foreach (var cluster in _previousClusterRes) {
-        int dist = Helpers.GetColorDistancePow2(col, cluster.Value);
+
+      foreach (var centroid in _currentCentroids) {
+        int dist = Helpers.GetColorDistancePow2(col, centroid.Key);
+
         if (dist < minDist) {
-          closestCluster = cluster.Key;
+          closestCentroid = centroid.Key;
           minDist = dist;
         }
 
       }
 
-      return closestCluster;
+      return closestCentroid;
+    }
+
+    public void UpdateClusterData () {
+
+      var updatedClusters = new Dictionary<(byte R, byte G, byte B), (int R, int G, int B, int ctr)>(_currentCentroids.Count);
+
+      foreach (var cluster in _currentCentroids) {
+        (int R, int G, int B, int ctr) = cluster.Value;
+
+        var newCentroid = ((byte)(R / ctr), (byte)(G / ctr), (byte)(B / ctr));
+
+        
+        if (newCentroid != cluster.Key)
+          updatedClusters.Add(newCentroid, (0, 0, 0, 0));
+      }
+
+      if (updatedClusters.Count == 0) // no more updates => end
+        _isClustering = false;
+
     }
 
     public void UpdateClustering () {
       while (_isClustering) {
-
-
         for (int y = 0; y < _input.Height; y++) {
           for (int x = 0; x < _input.Width; x++) {
             Color col = _input.GetPixel(x, y);
-            var closestCluster = FindClosestCluster(ref col);
+            var closestClusterCentroid = FindClosestCentroid(ref col);
+            var centroids = _currentCentroids[closestClusterCentroid];
 
-            _currentClustersRes[closestCluster] +=
+            centroids.R += col.R;
+            centroids.G += col.G;
+            centroids.B += col.B;
+            centroids.ctr++;
           }
         }
       }
-
     }
 
     public void InitializeCentroids() {
@@ -208,11 +230,14 @@ namespace _051colormap
         _previousClusterRes.Add((x, y), (col.R, col.G, col.B));
         _currentClustersRes.Add((x, y), (0, 0, 0));
       }
+
+      /*for (int i = 0; i < _clustersCount; i++) {
+
+      }*/
+
     }
 
   }
-
-
 
   class Colormap
   {
