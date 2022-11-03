@@ -13,8 +13,8 @@ namespace _051colormap
     private static Bitmap inputImage = null;
     public static int numCol = 6;
 
-    static string testImg = @"E:\school\NPRG003\grcis\051colormap\test_img\test_1.JPG";
-
+    static string testImg = @"E:\school\NPRG003\grcis\051colormap\test_img\test_14.png";
+    
     public Form1 ()
     {
       InitializeComponent();
